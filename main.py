@@ -5,9 +5,12 @@ app = Flask(__name__)
 @app.route('/webhook', methods=['POST'])
 def webhook():
     data = request.get_json()
-    print("Incoming:", data)
-    # שלב עיבוד ההודעה כאן – קרא מה "data" והוסף לוגיקה לפי הצורך
-    reply = {"text": "היי, קיבלתי את ההודעה שלך!"}
+    print("Incoming data:", data)
+
+    reply = {
+        "text": "התקבל! ✅ הבוט פעיל!"
+    }
+
     return jsonify(reply)
 
 if __name__ == '__main__':
