@@ -1,7 +1,11 @@
+
 services:
   - type: web
-    name: whatsapp-bot
+    name: whats-up-trading
     env: python
+    buildCommand: ""
+    startCommand: "python main.py"
+    region: oregon
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    branch: main
+    autoDeploy: tru
