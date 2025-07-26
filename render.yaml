@@ -4,7 +4,7 @@ services:
     name: whats-up-trading
     env: python
     buildCommand: ""
-    startCommand: "python main.py"
+    startCommand: gunicorn main:app   
     region: oregon
     plan: free
     branch: main
