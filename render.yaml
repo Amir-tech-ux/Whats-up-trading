@@ -1,11 +1,11 @@
 
 services:
   - type: web
-    name: whats-up-trading
+    name: Whats-up-trading
     env: python
-    
-        startCommand: gunicorn main.main:app   
-    region: oregon
     plan: free
-    branch: main
-    autoDeploy: true
+    buildCommand: ""
+    startCommand: gunicorn main:app
+    envVars:
+      - key: PORT
+        value: 10000
