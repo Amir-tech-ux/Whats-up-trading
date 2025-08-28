@@ -1,10 +1,13 @@
- services:
-  - type: web
-    name: Whats-up-trading
-    env: python
-    plan: free
+services:
+  - type: web            # סוג השירות: אתר/שרת אינטרנט
+    name: telegram-render-bot
+    env: python          # סביבת ריצה: פייתון
+    plan: free           # תכנית Free (אפשר לשנות לפי צורך)
     buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health   # בדיקת בריאות ל-Render
+    autoDeploy: true           # פריסה אוטומטית אחרי כל commit
     envVars:
-      - key: PORT
-        value: 10000
+      - key: TELEGRAM_TOKEN    # טוקן מה-BotFather
+        sync: false            # לא מסונכרן לקוד (נשמר כסוד ב-Render)
+
