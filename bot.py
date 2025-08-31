@@ -1,27 +1,25 @@
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    data = request.get_json(silent=True)
-    msg = data.get("message") or data.get("edited_message")
-    if not msg:
-        return {"ok": True}
+import os
+import logging
+import requests
+from flask import Flask, request, jsonify
 
-    chat_id = msg["chat"]["id"]
-    text = (msg.get("text") or "").strip()
+# ---------- Config & Setup ----------
+logging.basicConfig(level=logging.INFO)
+app = Flask(__name__)
 
-    low = text.lower()
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
+if not TELEGRAM_TOKEN:
+    logging.warning("TELEGRAM_TOKEN is missing from env vars!")
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-    if low.startswith("/start"):
-        send(chat_id, "👋 הבוט מחובר דרך Render ועובד בהצלחה!")
-    elif low.startswith("/status"):
-        send(chat_id, "✅ פעיל | Webhook OK")
-    elif low.startswith("/ping"):
-        send(chat_id, "🏓 pong")
-    elif low.startswith("/help"):
-        send(chat_id, "📖 פקודות:\n/start - התחלה\n/status - בדיקה\n/ping - בדיקה\n/push <טקסט> - שליחת פוש\n/signal - אות מסחר")
-    elif low.startswith("/push"):
-        payload = text[5:].strip() or "הודעה ריקה"
-        send(chat_id, f"📢 PUSH: {payload}")
-    elif low.startswith("/signal"):
-        send(chat_id, "📊 אות מסחר (דוגמה) 🚀")
-    else:
-        send(chat
+# ---------- Helpers ----------
+def send(chat_id: int, text: str):
+    """שליחת הודעה לטלגרם"""
+    try:
+        url = f"{TELEGRAM_API_URL}/sendMessage"
+        payload = {"chat_id": chat_id, "text": text}
+        r = requests.post(url, json=payload, timeout=10)
+        if not r.ok:
+            logging.error("sendMessage failed: %s %s", r.status_code, r.text)
+    except Exception as e:
+        logging.exception("sendMessage exception: %
