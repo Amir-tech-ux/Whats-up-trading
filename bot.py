@@ -1,50 +1,48 @@
- import os
-import logging
-from flask import Flask, request, jsonify
+import os, logging
+from flask import Flask, request
 import requests
 
-app = Flask(name)
+app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# --- ENV ---
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
-RENDER_URL = os.getenv("RENDER_URL")  # לדוגמה: https://your-app.onrender.com
-CHAT_ID = os.getenv("CHAT_ID")  # אם יש לך צ'אט קבוע לבדיקות
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+BASE = f"https://api.telegram.org/bot{TOKEN}"
 
-# --- API ---
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
-
-@app.route("/")
-def home():
-    return "Bot is running!", 200
+def send(chat_id, text):
+    try:
+        requests.post(f"{BASE}/sendMessage",
+                      json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+                      timeout=15)
+    except Exception as e:
+        app.logger.error(f"send error: {e}")
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    try:
-        data = request.get_json()
-        logging.info(f"Incoming update: {data}")
+    data = request.get_json(silent=True) or {}
+    msg = data.get("message") or data.get("edited_message")
+    if not msg:
+        return {"ok": True}
 
-        if "message" in data and "text" in data["message"]:
-            chat_id = data["message"]["chat"]["id"]
-            text = data["message"]["text"]
+    chat_id = msg["chat"]["id"]
+    text = (msg.get("text") or "").strip()
 
-            # תשובה אוטומטית
-            reply = f"התקבל: {text}"
-            send_message(chat_id, reply)
+    low = text.lower()
+    if low.startswith("/start"):
+        send(chat_id, "👋 הבוט מחובר דרך Render. פקודות: /status, /ping, /help, /push <טקסט>")
+    elif low.startswith("/status"):
+        send(chat_id, "✅ פעיל | Webhook OK | נסה /ping או /push שלום")
+    elif low.startswith("/ping"):
+        send(chat_id, "🏓 pong")
+    elif low.startswith("/help"):
+        send(chat_id, "פקודות:\n/start – הפעלה\n/status – מצב\n/ping – בדיקה\n/push <טקסט> – שלח הודעת בדיקה חוזרת")
+    elif low.startswith("/push"):
+        payload = text[5:].strip() or "בדיקת PUSH"
+        send(chat_id, f"📣 PUSH: {payload}")
+    else:
+        send(chat_id, f"📩 קיבלתי: {text}")
 
-        return jsonify({"status": "ok"}), 200
+    return {"ok": True}
 
-    except Exception as e:
-        logging.error(f"Error in webhook: {e}")
-        return jsonify({"status": "error"}), 500
-
-def send_message(chat_id, text):
-    """ שולח הודעה לצ'אט בוט """
-    url = f"{TELEGRAM_API_URL}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text}
-    response = requests.post(url, json=payload)
-    logging.info(f"Message sent: {response.text}")
-
-if name == "main":
-    port = int(os.environ.get("PORT", 5000))
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", "5000"))
     app.run(host="0.0.0.0", port=port)
