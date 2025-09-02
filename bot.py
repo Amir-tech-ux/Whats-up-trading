@@ -1,25 +1,37 @@
-import os
-import logging
-import requests
-from flask import Flask, request, jsonify
+from telegram.ext import Updater, CommandHandler
 
-# ---------- Config & Setup ----------
-logging.basicConfig(level=logging.INFO)
-app = Flask(__name__)
+# שים כאן את הטוקן שקיבלת מ-BotFather
+TOKEN = "הכנס_כאן_את_הטוקן_שלך"
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
-if not TELEGRAM_TOKEN:
-    logging.warning("TELEGRAM_TOKEN is missing from env vars!")
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
+# פקודת /start
+def start(update, context):
+    update.message.reply_text("✅ הבוט פעיל ומחובר!")
 
-# ---------- Helpers ----------
-def send(chat_id: int, text: str):
-    """שליחת הודעה לטלגרם"""
-    try:
-        url = f"{TELEGRAM_API_URL}/sendMessage"
-        payload = {"chat_id": chat_id, "text": text}
-        r = requests.post(url, json=payload, timeout=10)
-        if not r.ok:
-            logging.error("sendMessage failed: %s %s", r.status_code, r.text)
-    except Exception as e:
-        logging.exception("sendMessage exception: %
+# פקודת /status
+def status(update, context):
+    update.message.reply_text("📡 סטטוס: פעיל | Webhook OK")
+
+# פקודת /ping
+def ping(update, context):
+    update.message.reply_text("🏓 pong")
+
+# פקודת /alert
+def alert(update, context):
+    update.message.reply_text("🚨 התקבלה התראה בסיסית! 🚨")
+
+def main():
+    updater = Updater(TOKEN, use_context=True)
+    dp = updater.dispatcher
+
+    # חיבור הפקודות
+    dp.add_handler(CommandHandler("start", start))
+    dp.add_handler(CommandHandler("status", status))
+    dp.add_handler(CommandHandler("ping", ping))
+    dp.add_handler(CommandHandler("alert", alert))
+
+    # הפעלת הבוט
+    updater.start_polling()
+    updater.idle()
+
+if __name__ == "__main__":
+    main()
