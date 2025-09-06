@@ -4,24 +4,29 @@ from fastapi import FastAPI, Request, HTTPException
 
 app = FastAPI()
 
+# --- משתנים מה-Environment (ברנדר) ---
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 API = f"https://api.telegram.org/bot{TOKEN}"
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "mysecret")
-
-# מזהים לפוש
 PRIMARY_CHAT_ID = os.environ.get("PRIMARY_CHAT_ID", "")
 SECONDARY_CHAT_ID = os.environ.get("SECONDARY_CHAT_ID_404", "")
 
+
+# --- שליחת הודעה לטלגרם ---
 async def tg_send(chat_id: str, text: str):
     if not chat_id:
         return
     async with httpx.AsyncClient(timeout=10) as c:
         await c.post(f"{API}/sendMessage", data={"chat_id": chat_id, "text": text})
 
+
+# --- שליחת התראה לשני מכשירים ---
 async def send_alert(text: str):
     await tg_send(PRIMARY_CHAT_ID, text)
     await tg_send(SECONDARY_CHAT_ID, text)
 
+
+# --- בעת עלייה של השרת ---
 @app.on_event("startup")
 async def on_startup():
     base = os.environ.get("RENDER_EXTERNAL_URL")
@@ -30,6 +35,8 @@ async def on_startup():
         async with httpx.AsyncClient(timeout=10) as c:
             await c.post(f"{API}/setWebhook", data={"url": url})
 
+
+# --- Webhook ---
 @app.post("/webhook/{secret}")
 async def webhook(secret: str, request: Request):
     if secret != WEBHOOK_SECRET:
@@ -41,16 +48,17 @@ async def webhook(secret: str, request: Request):
         return {"ok": True}
 
     chat_id = str(msg["chat"]["id"])
-    print("📢 Chat ID:", chat_id)   # כאן יודפס ה-Chat ID בלוגים
     text = (msg.get("text") or "").strip()
 
-    # פקודות
-    if text.lower() in ("/start", "start", "/start/", "/Start", "/Start/"):
-        await tg_send(chat_id, "✅ הבוט פעיל. פקודות: /ping , /whoami , /broadcast <טקסט>")
+    print("📢 Chat ID:", chat_id)  # לוגים ברנדר
+
+    # --- פקודות ---
+    if text.lower() in ("/start", "start", "/Start", "Start"):
+        await tg_send(chat_id, "✅ הבוט פעיל. פקודות זמינות: /ping , /whoami , /broadcast <טקסט>")
     elif text.lower() == "/ping":
         await tg_send(chat_id, "🏓 pong")
     elif text.lower() == "/whoami":
-        await tg_send(chat_id, f"ℹ️ chat_id שלך: {chat_id}")
+        await tg_send(chat_id, f"ℹ️ ה-Chat ID שלך הוא: {chat_id}")
     elif text.lower().startswith("/broadcast "):
         admin_id = os.environ.get("PRIMARY_CHAT_ID", "")
         if admin_id and chat_id == admin_id:
@@ -59,8 +67,12 @@ async def webhook(secret: str, request: Request):
             await tg_send(chat_id, "✅ נשלח לשני המכשירים")
         else:
             await tg_send(chat_id, "⛔ הפקודה זמינה רק לאדמין")
+
     return {"ok": True}
 
+
+# --- בדיקה שהשרת חי ---
 @app.get("/")
 def root():
     return {"ok": True}
+    
