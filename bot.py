@@ -8,7 +8,7 @@ TOKEN = os.environ["TELEGRAM_TOKEN"]
 API = f"https://api.telegram.org/bot{TOKEN}"
 WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "mysecret")
 
-# נמעני פוש
+# מזהים לפוש
 PRIMARY_CHAT_ID = os.environ.get("PRIMARY_CHAT_ID", "")
 SECONDARY_CHAT_ID = os.environ.get("SECONDARY_CHAT_ID_404", "")
 
@@ -41,18 +41,16 @@ async def webhook(secret: str, request: Request):
         return {"ok": True}
 
     chat_id = str(msg["chat"]["id"])
+    print("📢 Chat ID:", chat_id)   # כאן יודפס ה-Chat ID בלוגים
     text = (msg.get("text") or "").strip()
 
     # פקודות
     if text.lower() in ("/start", "start", "/start/", "/Start", "/Start/"):
-        await tg_send(chat_id, "✅ הבוט פעיל. פקודות: /ping, /whoami, /broadcast <טקסט>")
-
+        await tg_send(chat_id, "✅ הבוט פעיל. פקודות: /ping , /whoami , /broadcast <טקסט>")
     elif text.lower() == "/ping":
         await tg_send(chat_id, "🏓 pong")
-
     elif text.lower() == "/whoami":
         await tg_send(chat_id, f"ℹ️ chat_id שלך: {chat_id}")
-
     elif text.lower().startswith("/broadcast "):
         admin_id = os.environ.get("PRIMARY_CHAT_ID", "")
         if admin_id and chat_id == admin_id:
@@ -61,10 +59,8 @@ async def webhook(secret: str, request: Request):
             await tg_send(chat_id, "✅ נשלח לשני המכשירים")
         else:
             await tg_send(chat_id, "⛔ הפקודה זמינה רק לאדמין")
-
     return {"ok": True}
 
 @app.get("/")
 def root():
     return {"ok": True}
-
