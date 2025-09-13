@@ -3,7 +3,9 @@ import httpx
 from fastapi import FastAPI, Request, HTTPException
 
 app = FastAPI()
-
+@app.get("/")
+async def root():
+    return {"status": "ok"}
 # --- משתנים מה-Environment (ברנדר) ---
 TOKEN = os.environ["TELEGRAM_TOKEN"]
 API = f"https://api.telegram.org/bot{TOKEN}"
