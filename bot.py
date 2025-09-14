@@ -42,7 +42,7 @@ def telegram_webhook():
         send_message(chat_id, "🤖 ברוך הבא! הבוט מחובר ✅\nשלח לי טקסט ואני אחזור אליך.\nנסה /help כדי לראות פקודות.")
     elif t.startswith("/whoami"):
         name = chat.get("title") or chat.get("username") or chat.get("first_name", "לא ידוע")
-        send_message(chat_id, f"אתה/ח: {name} (chat_id={chat_id})")
+        send_message(chat_id, f"את/ה: {name} (chat_id={chat_id})")
     elif t.startswith("/ping"):
         send_message(chat_id, "pong ✅")
     elif t.startswith("/help"):
@@ -51,10 +51,21 @@ def telegram_webhook():
             "/start – בדיקה ראשונית\n"
             "/whoami – להחזיר את השם שלך\n"
             "/ping – בדיקת חיים (pong)\n"
+            "/status – בדיקת מצב השרת\n"
             "/help – רשימת פקודות\n"
             "✉️ כל טקסט אחר – אני אחזיר לך 'קיבלתי ✅'"
         )
         send_message(chat_id, commands)
+    elif t.startswith("/status"):
+        # בדיקת מצב השרת
+        try:
+            r = requests.get("https://amir-trading-bot.onrender.com/health")
+            if r.status_code == 200:
+                send_message(chat_id, "🟢 השרת חי ועובד (status=ok)")
+            else:
+                send_message(chat_id, f"🔴 בעיה בשרת (code={r.status_code})")
+        except Exception as e:
+            send_message(chat_id, f"⚠️ שגיאה בבדיקת סטטוס: {e}")
     else:
         # כל טקסט אחר
         send_message(chat_id, f"קיבלתי ✅: {text}")
