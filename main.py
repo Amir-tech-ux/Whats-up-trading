@@ -99,3 +99,45 @@ def whoami():
         "FB_VERIFY_TOKEN": bool(FB_VERIFY_TOKEN),
         "FB_PAGE_ACCESS_TOKEN": bool(FB_PAGE_ACCESS_TOKEN),
     }})
+logging.INFO)
+
+# ---- helper function ----
+def send_message(chat_id: int, text: str):
+    try:
+        r = requests.post(
+            f"{TG_API}/sendMessage",
+            json={"chat_id": chat_id, "text": text, "parse_mode": "HTML"},
+            timeout=15,
+        )
+        if r.status_code != 200:
+            app.logger.error("sendMessage failed: %s %s", r.status_code, r.text)
+    except Exception as e:
+        app.logger.error("sendMessage error: %s", e)
+
+
+# ========= Routes =========
+@app.route("/", methods=["GET"])
+def health():
+    """בדיקת תקינות"""
+    return "OK", 200
+
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    """קליטת הודעות מטלגרם"""
+    if request.args.get("secret") != WEBHOOK_SECRET:
+        return "forbidden", 403
+
+    try:
+        update = request.get_json(force=True)
+        app.logger.info(update)
+
+        if not update or "message" not in update:
+            return jsonify(ok=True)
+
+        msg = update["message"]
+        chat_id = msg["chat"]["id"]
+        text = msg.get("text", "")
+
+        if text.startswith("/start"):
+            send_message(chat_id, "✅ Amir_Trading_Bot מחובר בהצלחה!\nהקלד /
