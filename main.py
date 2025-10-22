@@ -1,10 +1,30 @@
+
+
+import os
+import json
+import requests
+from flask import Flask, request, jsonify
+import logging
+
+# ---- הגדרת לוגים ----
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
+)
+
+# ---- יצירת אפליקציית Flask ----
+app = Flask(__name__)
+
 if __name__ == "__main__":
     from waitress import serve
     port = int(os.environ.get("PORT", 10000))
-    serve(app, host="0.0.0.0", port=port)import os, json, requests
-from flask import Flask, request, jsonify
+    serve(app, host="0.0.0.0", port=port)
 
-app = Flask(__name__)
+    
+if __name__ == "__main__":
+    from waitress import serve
+    port = int(os.environ.get("PORT", 10000))
+    serve(app, host="0.0.0.0", port=port)
 
 # ===== Telegram =====
 TG_TOKEN = os.getenv("TG_TOKEN") or os.getenv("TOKEN") or ""
