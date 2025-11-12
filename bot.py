@@ -1,27 +1,18 @@
-import os
-import logging
-import requests
 from flask import Flask, request, jsonify
+import os
+import requests
 
-# ======= Config =======
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-PUBLIC_URL = os.environ.get("PUBLIC_URL", "https://amir-trading-bot.onrender.com")
-WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "amir404secret")
-TG_API = f"https://api.telegram.org/bot{TOKEN}"
-MT_SECRET = os.environ.get("MT_SECRET", "change_me")  # למטא-טריידר
-
-if not TOKEN:
-    raise RuntimeError("Missing TELEGRAM_TOKEN environment variable")
-if not PUBLIC_URL:
-    raise RuntimeError("Missing PUBLIC_URL env var (e.g. https://<app>.onrender.com)")
-
-# ======= App =======
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
 
+# נתוני התחברות בסיסיים
+TG_API = os.environ.get("TG_API")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
+PUBLIC_URL = os.environ.get("PUBLIC_URL")
+
+# בדיקת בריאות השרת
 @app.route("/health")
 def health():
-    return jsonify({"status": "ok"})
+    return jsonify({"status": "running"})
 
 # הגדרת webhook מול טלגרם
 @app.route("/set_webhook")
@@ -35,4 +26,12 @@ def set_webhook():
 @app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
 def webhook():
     try:
-        update = request.get_json(force
+        update = request.get_json(force=True)
+        print("Received update:", update)
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
