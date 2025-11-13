@@ -1,37 +1,34 @@
-from flask import Flask, request, jsonify
-import os
-import requests
+import telebot
+from flask import Flask, request
 
+API_TOKEN = "הכנס_כאן_את_הטוקן_שלך"   # הטוקן מבוטפאדר
+CHAT_ID = 422909924                   # זה ה־Chat ID שלך
+
+bot = telebot.TeleBot(API_TOKEN)
 app = Flask(__name__)
 
-# נתוני התחברות בסיסיים
-TG_API = os.environ.get("TG_API")
-WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
-PUBLIC_URL = os.environ.get("PUBLIC_URL")
+# --- פונקציה לשליחת הודעות PUSH ---
+def send_alert(message):
+    bot.send_message(CHAT_ID, message)
 
-# בדיקת בריאות השרת
-@app.route("/health")
-def health():
-    return jsonify({"status": "running"})
+# --- בדיקה שהבוט חי ---
+@app.route("/", methods=['GET'])
+def home():
+    return "Bot is running", 200
 
-# הגדרת webhook מול טלגרם
-@app.route("/set_webhook")
-def set_webhook():
-    url = f"{PUBLIC_URL}/webhook/{WEBHOOK_SECRET}"
-    r = requests.post(f"{TG_API}/setWebhook", json={"url": url}, timeout=10)
-    ok = r.json().get("ok", False)
-    return jsonify({"ok": ok, "url": url, "resp": r.json()}), (200 if ok else 500)
-
-# נקודת קליטת עדכונים מטלגרם
-@app.route(f"/webhook/{WEBHOOK_SECRET}", methods=["POST"])
+# --- Webhook שקולט הודעות מטלגרם ---
+@app.route("/webhook", methods=['POST'])
 def webhook():
-    try:
-        update = request.get_json(force=True)
-        print("Received update:", update)
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    json_data = request.stream.read().decode("utf-8")
+    update = telebot.types.Update.de_json(json_data)
+    bot.process_new_updates([update])
+    return "OK", 200
 
+# --- תגובה לכל הודעה שאתה שולח לבוט ---
+@bot.message_handler(func=lambda message: True)
+def echo(message):
+    send_alert("✔️ קיבלתי: " + message.text)
 
+# --- הפעלת הבוט ---
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=10000)
