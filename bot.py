@@ -1,33 +1,39 @@
-import requests
+import os
 from flask import Flask, request
+import requests
 
-# --- CONFIG ---
-TOKEN = "8101329393:AAE36Q5txkc6HkdFikK_FfvvCsR_ocaKNro"
-CHAT_ID = 422909924  # Amir
-
-# --- FLASK APP ---
 app = Flask(__name__)
 
-@app.route(f"/{TOKEN}", methods=["POST"])
+# הטוקן נלקח רק מה-ENV ברנדר (לא בקוד)
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
+
+# פונקציית שליחת הודעה
+def send_message(chat_id, text):
+    url = f"{BASE_URL}/sendMessage"
+    payload = {"chat_id": chat_id, "text": text}
+    requests.post(url, json=payload)
+
+# נקודת ה-WebHook
+@app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
 
-    # אם מגיעה הודעה מהטלגרם
     if "message" in data:
+        chat_id = data["message"]["chat"]["id"]
         text = data["message"].get("text", "")
-        send_message(f"הודעה התקבלה: {text}")
 
-    return "OK", 200
+        # פקודת בדיקה
+        if text == "/start":
+            send_message(chat_id, "הבוט פעיל! ✔️")
+        elif text == "/ping":
+            send_message(chat_id, "PONG ✔️")
+        else:
+            send_message(chat_id, f"קיבלתי: {text}")
 
-def send_message(text):
-    """שליחת הודעה חזרה לטלגרם"""
-    url = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-    payload = {"chat_id": CHAT_ID, "text": text}
-    requests.post(url, json=payload)
+    return "ok", 200
 
+# דף הבית (בדיקה)
 @app.route("/")
 def home():
-    return "Bot is running", 200
-
-if __name__ == "__main__":
-    app.run()
+    return "Bot is running ✔️"
