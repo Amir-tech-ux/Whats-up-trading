@@ -1,13 +1,7 @@
 services:
-  - type: web            # סוג השירות: אתר/שרת אינטרנט
-    name: telegram-render-bot
-    env: python          # סביבת ריצה: פייתון
-    plan: free           # תכנית Free (אפשר לשנות לפי צורך)
-    buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health   # בדיקת בריאות ל-Render
-    autoDeploy: true           # פריסה אוטומטית אחרי כל commit
-    envVars:
-      - key: TELEGRAM_TOKEN    # טוקן מה-BotFather
-        sync: false            # לא מסונכרן לקוד (נשמר כסוד ב-Render)
-
+  - type: web
+    name: amir-trading-bot
+    env: python
+    plan: free
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn bot:app"
