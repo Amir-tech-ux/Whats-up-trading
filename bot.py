@@ -17,19 +17,18 @@ BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 # ---------- Helper: send message ----------
 def send_message(chat_id: int, text: str):
     url = f"{BASE_URL}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-    }
-    requests.post(url, json=payload)
+    payload = {"chat_id": chat_id, "text": text}
+    try:
+        requests.post(url, json=payload, timeout=5)
+    except Exception as e:
+        logging.error(f"Failed to send message: {e}")
 
-# ---------- Webhook ----------
+# ---------- Webhook endpoint ----------
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
     logging.info(f"Incoming update: {data}")
 
-    # אם הגיע ריק – מחזירים תשובה מיד
     if not data:
         return jsonify({"status": "no data"}), 200
 
@@ -41,24 +40,28 @@ def webhook():
         if chat_id is None:
             return jsonify({"status": "no chat id"}), 200
 
-        lower = text.lower()
+        # Normalize text
+        lower = text.strip().lower()
 
-        if lower == "/start":
+        # ----- Commands -----
+        if "start" in lower:
             send_message(chat_id, "הבוט פעיל! ✔️")
-        elif lower == "/ping" or lower == "פינג" or lower == "/בדיקה":
+
+        elif "ping" in lower or "פינג" in lower or "בדיקה" in lower:
             send_message(chat_id, "PONG ✔️")
+
         else:
-            # אקו – מחזיר מה שנשלחת
+            # Echo
             send_message(chat_id, f"קיבלתי: {text}")
 
-    # תשובה מהירה לטלגרם כדי שלא יהיה timeout
+    # Quick OK response
     return jsonify({"status": "ok"}), 200
 
-# ---------- Home page (בדיקה בדפדפן) ----------
+# ---------- Home page ----------
 @app.route("/", methods=["GET"])
 def home():
-    return "Bot is running ✅", 200
+    return "Bot is running ✔️", 200
 
-# ---------- Local run only (לא בשימוש ברנדר) ----------
+# ---------- Local run (not used on Render) ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
