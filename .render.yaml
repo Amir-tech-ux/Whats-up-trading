@@ -4,7 +4,4 @@ services:
     env: python
     plan: free
     buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn bot:app"
-    envVars:
-      - key: TELEGRAM_BOT_TOKEN
-        value: "8101329393:AAGZgiQfG0xwI-k3pc4QG__5VDFcIom5Zyg"
+    startCommand: "gunicorn bot:app --bind 0.0.0.0:$PORT"
