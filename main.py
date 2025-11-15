@@ -1,39 +1,55 @@
+import os
 import logging
-from flask import Flask, request
+from flask import Flask, request, jsonify
 import requests
 
-TOKEN = "8101329393:AAFmph9j-_mMV5PrOLoJnqDws4J7G78lKLU"
-URL = f"https://api.telegram.org/bot{TOKEN}/sendMessage"
-
+# ---------- App ----------
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
+# ---------- Telegram Token ----------
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+if not TOKEN:
+    raise RuntimeError("Missing TELEGRAM_TOKEN environment variable")
+
+BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
+
+# ---------- Helper ----------
+def send_message(chat_id: int, text: str):
+    url = f"{BASE_URL}/sendMessage"
+    try:
+        requests.post(url, json={"chat_id": chat_id, "text": text}, timeout=5)
+    except Exception as e:
+        logging.error(f"Send error: {e}")
+
+# ---------- Webhook ----------
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
+    logging.info(f"Incoming update: {data}")
 
-    if "message" in data:
-        chat_id = data["message"]["chat"]["id"]
-        text = data["message"].get("text", "")
+    if not data or "message" not in data:
+        return jsonify({"status": "ok"}), 200
 
-        if text.lower() in ["/ping", "ping", "/ping/"]:
-            send_message(chat_id, "PONG ✔️")
-        elif text.lower() == "/start":
-            send_message(chat_id, "הבוט פעיל ועובד! ✔️")
-        else:
-            send_message(chat_id, f"קיבלתי: {text}")
+    message = data["message"]
+    chat_id = message["chat"]["id"]
+    text = message.get("text", "").strip()
+    lower = text.lower()
 
-    return "OK"
+    # ------- Commands -------
+    if lower in ["/start", "start"]:
+        send_message(chat_id, "הבוט פעיל! ✔️")
+        return "", 200
 
+    if lower in ["/ping", "ping", "פינג", "/בדיקה", "בדיקה"]:
+        send_message(chat_id, "PONG ✔️")
+        return "", 200
 
-def send_message(chat_id, text):
-    requests.post(URL, json={"chat_id": chat_id, "text": text})
+    # ------- Echo -------
+    send_message(chat_id, f"קיבלתי: {text}")
+    return "", 200
 
-
+# ---------- Home ----------
 @app.route("/", methods=["GET"])
 def home():
-    return "Bot is running!"
-
-
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    return "Bot is running ✔️", 200
