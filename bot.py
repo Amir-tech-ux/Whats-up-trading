@@ -1,45 +1,73 @@
 import os
-from flask import Flask, request
+import logging
+from flask import Flask, request, jsonify
 import requests
 
+# --------- App ---------
 app = Flask(__name__)
+logging.basicConfig(level=logging.INFO)
 
-# --- TOKEN ---
+# --------- Telegram Token ---------
 TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+if not TOKEN:
+    raise RuntimeError("Missing TELEGRAM_BOT_TOKEN environment variable")
+
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-# --- SEND MESSAGE ---
-def send_message(chat_id, text):
-    url = f"{BASE_URL}/sendMessage"
-    payload = {"chat_id": chat_id, "text": text}
-    requests.post(url, json=payload)
 
-# --- WEBHOOK ---
+# --------- Helper: send message ---------
+def send_message(chat_id: int, text: str):
+    url = f"{BASE_URL}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+    }
+    try:
+        resp = requests.post(url, json=payload, timeout=5)
+        logging.info(f"send_message status={resp.status_code}, text={resp.text}")
+    except Exception as e:
+        logging.exception(f"Error sending message: {e}")
+
+
+# --------- Webhook ---------
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
+    logging.info(f"Incoming update: {data}")
 
+    # אם הגיע ריק – מחזירים תשובה מיד
     if not data:
-        return "no data", 200
+        return jsonify({"status": "no data"}), 200
 
     if "message" in data:
-        chat_id = data["message"]["chat"]["id"]
+        chat = data["message"].get("chat", {})
+        chat_id = chat.get("id")
         text = data["message"].get("text", "")
 
-        if text.lower() == "/start":
-            send_message(chat_id, "הבוט פעיל! ✔")
-        elif text.lower() == "/ping":
-            send_message(chat_id, "PONG ✔")
+        if chat_id is None:
+            return jsonify({"status": "no chat id"}), 200
+
+        # פקודות בסיסיות
+        lower = text.lower()
+
+        if lower == "/start":
+            send_message(chat_id, "הבוט פעיל! ✔️")
+        elif lower == "/ping":
+            send_message(chat_id, "PONG ✔️")
         else:
+            # אקו – מחזיר מה ששלחת
             send_message(chat_id, f"קיבלתי: {text}")
 
-    return "ok", 200
+    # תשובה מהירה לטלגרם כדי שלא יהיה timeout
+    return jsonify({"status": "ok"}), 200
 
-# --- HOME PAGE ---
-@app.route("/")
+
+# --------- Home page (בדיקה בדפדפן) ---------
+@app.route("/", methods=["GET"])
 def home():
-    return "Bot is running ✔"
+    return "Bot is running ✅", 200
 
-# --- RUN (for local tests only) ---
+
+# --------- Local run only (לא בשימוש ב-Render) ---------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
