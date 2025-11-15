@@ -3,33 +3,27 @@ import logging
 from flask import Flask, request, jsonify
 import requests
 
-# --------- App ---------
+# ---------- App ----------
 app = Flask(__name__)
 logging.basicConfig(level=logging.INFO)
 
-# --------- Telegram Token ---------
-TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+# ---------- Telegram Token ----------
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
 if not TOKEN:
-    raise RuntimeError("Missing TELEGRAM_BOT_TOKEN environment variable")
+    raise RuntimeError("Missing TELEGRAM_TOKEN environment variable")
 
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
-
-# --------- Helper: send message ---------
+# ---------- Helper: send message ----------
 def send_message(chat_id: int, text: str):
     url = f"{BASE_URL}/sendMessage"
     payload = {
         "chat_id": chat_id,
         "text": text,
     }
-    try:
-        resp = requests.post(url, json=payload, timeout=5)
-        logging.info(f"send_message status={resp.status_code}, text={resp.text}")
-    except Exception as e:
-        logging.exception(f"Error sending message: {e}")
+    requests.post(url, json=payload)
 
-
-# --------- Webhook ---------
+# ---------- Webhook ----------
 @app.route("/webhook", methods=["POST"])
 def webhook():
     data = request.get_json()
@@ -47,27 +41,24 @@ def webhook():
         if chat_id is None:
             return jsonify({"status": "no chat id"}), 200
 
-        # פקודות בסיסיות
         lower = text.lower()
 
         if lower == "/start":
             send_message(chat_id, "הבוט פעיל! ✔️")
-        elif lower == "/ping":
+        elif lower == "/ping" or lower == "פינג" or lower == "/בדיקה":
             send_message(chat_id, "PONG ✔️")
         else:
-            # אקו – מחזיר מה ששלחת
+            # אקו – מחזיר מה שנשלחת
             send_message(chat_id, f"קיבלתי: {text}")
 
     # תשובה מהירה לטלגרם כדי שלא יהיה timeout
     return jsonify({"status": "ok"}), 200
 
-
-# --------- Home page (בדיקה בדפדפן) ---------
+# ---------- Home page (בדיקה בדפדפן) ----------
 @app.route("/", methods=["GET"])
 def home():
     return "Bot is running ✅", 200
 
-
-# --------- Local run only (לא בשימוש ב-Render) ---------
+# ---------- Local run only (לא בשימוש ברנדר) ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
