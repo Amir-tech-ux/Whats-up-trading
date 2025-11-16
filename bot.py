@@ -1,150 +1,112 @@
 import os
 import logging
 import re
+
 from flask import Flask, request, jsonify
 import requests
 
 # ---------- Logging ----------
 logging.basicConfig(level=logging.INFO)
 
-# ---------- App ----------
-app = Flask(__name__)
-
-# ---------- Telegram Token ----------
+# ---------- Telegram token ----------
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
 if not TOKEN:
     raise RuntimeError("Missing TELEGRAM_TOKEN environment variable")
 
 BASE_URL = f"https://api.telegram.org/bot{TOKEN}"
 
+# ---------- Flask app ----------
+app = Flask(__name__)
 
-# ---------- Helper: send message ----------
-def send_message(chat_id: int, text: str):
+
+def send_message(chat_id: int, text: str) -> None:
+    """Send a plain text message to Telegram and log the result."""
     url = f"{BASE_URL}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text
-    }
+    payload = {"chat_id": chat_id, "text": text}
+
     try:
-        requests.post(url, json=payload, timeout=5)
+        resp = requests.post(url, json=payload, timeout=5)
+        logging.info(
+            "Telegram sendMessage status=%s body=%s",
+            resp.status_code,
+            resp.text,
+        )
     except Exception as e:
         logging.error(f"Failed to send message: {e}")
 
 
-# ---------- Trading signal parser ----------
-def parse_trading_signal(text: str) -> str | None:
-    """
-    מנסה לזהות הודעת מסחר בסגנון:
-    'לונג דאקס 01800 סטופ 17950'
-    'שורט nasdaq 16000 סטופ 16100'
-    ומחזיר טקסט תשובה יפה, או None אם לא זוהה.
-    """
-
-    lower = text.strip().lower()
-
-    # צד העסקה
-    side = None
-    if "לונג" in text or "long" in lower:
-        side = "לונג"
-    elif "שורט" in text or "short" in lower:
-        side = "שורט"
-
-    if not side:
-        return None
-
-    # מנסים לזהות נכס (המילה אחרי לונג/שורט)
-    asset = "לא צוין"
-    words = text.split()
-    for i, w in enumerate(words):
-        if w in ("לונג", "long", "שורט", "short"):
-            if i + 1 < len(words):
-                asset = words[i + 1]
-            break
-
-    # מחירים (מספרים) – נניח ראשון = כניסה, שני = סטופ
-    nums = re.findall(r"\d+", text)
-    entry = nums[0] if len(nums) >= 1 else "לא צוין"
-    stop = nums[1] if len(nums) >= 2 else "לא צוין"
-
-    reply = (
-        "📊 קיבלתי אות מסחר:\n"
-        f"• צד: {side}\n"
-        f"• נכס: {asset}\n"
-        f"• כניסה: {entry}\n"
-        f"• סטופ: {stop}\n\n"
-        "⚠️ שים לב: זה רק אישור טכני של קבלת ההודעה, "
-        "לא המלצה לביצוע עסקה."
-    )
-    return reply
+@app.route("/", methods=["GET"])
+def index():
+    return "OK", 200
 
 
 # ---------- Webhook endpoint ----------
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json(silent=True, force=True)
+    data = request.get_json()
     logging.info(f"Incoming update: {data}")
 
     if not data:
         return jsonify({"status": "no data"}), 200
 
-    # לוקחים את ההודעה הרלוונטית (רגילה או ערוכה)
+    # קח הודעה רגילה או הודעה ערוכה
     message = data.get("message") or data.get("edited_message")
     if not message:
         return jsonify({"status": "no message"}), 200
 
     chat = message.get("chat", {})
     chat_id = chat.get("id")
+    if not chat_id:
+        return jsonify({"status": "no chat id"}), 200
 
-    # טיפול בתמונות
-    if "photo" in message:
-        # אפשר גם לקרוא caption אם יש
-        caption = message.get("caption", "")
-        reply = "📸 קיבלתי תמונה."
-        if caption:
-            reply += f"\nכיתוב: {caption}"
-        if chat_id is not None:
-            send_message(chat_id, reply)
-        return jsonify({"status": "ok"}), 200
-
-    # טקסט רגיל
-    text = message.get("text", "")
-    if chat_id is None or not text:
-        return jsonify({"status": "ok"}), 200
-
+    text = message.get("text", "") or ""
     lower = text.strip().lower()
 
-    # ----- Commands -----
+    # ---------- Commands ----------
     if lower.startswith("/start"):
         send_message(
             chat_id,
             "הבוט פעיל! ✅\n"
-            "/ping או 'בדיקה' – לבדיקה.\n"
-            "תוכל לשלוח גם אות מסחר, למשל:\n"
-            "לונג דאקס 01800 סטופ 17950"
+            "שלח לי:\n"
+            "• /ping או 'בדיקה'\n"
+            "• אות מסחר למשל: 'לונג דאקס 01800 סטופ 17950'",
         )
+        return jsonify({"status": "ok"}), 200
 
-    elif lower.startswith("/ping") or "בדיקה" in text:
+    if "ping" in lower or "פינג" in lower or "בדיקה" in lower:
         send_message(chat_id, "PONG ✅")
+        return jsonify({"status": "ok"}), 200
 
-    else:
-        # קודם ננסה לפרש כאות מסחר
-        signal_reply = parse_trading_signal(text)
-        if signal_reply:
-            send_message(chat_id, signal_reply)
-        else:
-            # אקו רגיל
-            send_message(chat_id, f"קיבלתי: {text}")
+    # ---------- Trading signal ----------
+    # דוגמה: לונג דאקס 01800 סטופ 17950
+    match = re.search(r"(לונג|שורט)\s+(\S+)\s+(\d+)\s+סטופ\s+(\d+)", text)
+    if match:
+        direction = match.group(1)     # לונג / שורט
+        instrument = match.group(2)    # דאקס / נאסדק ...
+        entry = match.group(3)         # 01800
+        stop = match.group(4)          # 17950
 
-    # תשובת OK לטלגרם
+        reply = (
+            "📈 אות מסחר התקבל:\n"
+            f"סוג: {direction}\n"
+            f"נכס: {instrument}\n"
+            f"כניסה: {entry}\n"
+            f"סטופ: {stop}\n\n"
+            "✅ נשמר. בהמשך נוסיף TP ופרוטוקול מעיין."
+        )
+        send_message(chat_id, reply)
+        return jsonify({"status": "ok"}), 200
+
+    # ברירת מחדל – לא זיהה כלום
+    send_message(
+        chat_id,
+        "לא הבנתי ✋\n"
+        "נסה /ping או דוגמה: 'לונג דאקס 01800 סטופ 17950'",
+    )
     return jsonify({"status": "ok"}), 200
 
 
-# ---------- Home page ----------
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running ✅", 200
-
-
-# ---------- Local run (לא בשימוש ברנדר) ----------
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=10000)
+    # להרצה מקומית (לא חובה ברנדר אבל לא מפריע)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
