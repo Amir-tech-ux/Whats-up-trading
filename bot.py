@@ -1,12 +1,14 @@
 import os
-import re
 import logging
+import re
 from flask import Flask, request, jsonify
 import requests
 
+# ---------- Logging ----------
+logging.basicConfig(level=logging.INFO)
+
 # ---------- App ----------
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
 
 # ---------- Telegram Token ----------
 TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -29,130 +31,111 @@ def send_message(chat_id: int, text: str):
         logging.error(f"Failed to send message: {e}")
 
 
-# ---------- Helper: trading trigger analyzer ----------
-def analyze_trading_trigger(text: str) -> str | None:
+# ---------- Trading signal parser ----------
+def parse_trading_signal(text: str) -> str | None:
     """
-    מקבל טקסט חופשי מהטלגרם ומנסה להבין:
-    - כיוון (לונג / שורט)
-    - נכס (דאקס, נאסד״ק, דולר/ין וכו')
-    - רמות מחיר שהוזכרו
-    מחזיר טקסט תשובה, או None אם לא זיהינו כלום.
+    מנסה לזהות הודעת מסחר בסגנון:
+    'לונג דאקס 01800 סטופ 17950'
+    'שורט nasdaq 16000 סטופ 16100'
+    ומחזיר טקסט תשובה יפה, או None אם לא זוהה.
     """
-    lower = text.lower()
 
-    # כיוון
-    direction = None
-    if any(word in lower for word in ["long", " לונג", "לונג "]):
-        direction = "LONG 📈 (לונג)"
-    elif any(word in lower for word in ["short", " שורט", "שורט "]):
-        direction = "SHORT 📉 (שורט)"
+    lower = text.strip().lower()
 
-    # נכס
-    instrument = None
-    instruments = [
-        (["dax", "ger40", "דקס"], "GER40 / DAX"),
-        (["nas", "nasdaq", "נאסדק"], "NASDAQ"),
-        (["usd/jpy", "דולר/ין", "דולר ין", "usdjpy"], "USD/JPY"),
-        (["eur/usd", "יורו דולר", "eurusd"], "EUR/USD"),
-        (["gold", "xau", "זהב"], "GOLD"),
-        (["oil", "brent", "נפט"], "OIL"),
-    ]
-    for keys, name in instruments:
-        if any(k in lower for k in keys):
-            instrument = name
-            break
+    # צד העסקה
+    side = None
+    if "לונג" in text or "long" in lower:
+        side = "לונג"
+    elif "שורט" in text or "short" in lower:
+        side = "שורט"
 
-    # רמות מספריות (מחירים, סטופים, טייקים)
-    # דוגמה: 154.70, 18000, 1.0652 וכו'
-    levels = re.findall(r"\d+(?:\.\d+)?", text)
-
-    if not direction and not instrument and not levels:
+    if not side:
         return None
 
-    lines = ["🔍 זיהיתי טריגר מסחר מההודעה שלך:"]
-    if direction:
-        lines.append(f"• כיוון: {direction}")
-    if instrument:
-        lines.append(f"• נכס: {instrument}")
-    if levels:
-        pretty = ", ".join(levels)
-        lines.append(f"• רמות מספריות שהוזכרו: {pretty}")
-        if len(levels) >= 2:
-            lines.append("  (תוכל לכתוב מפורש: כניסה / סטופ / טייק, כדי שאבין יותר טוב)")
+    # מנסים לזהות נכס (המילה אחרי לונג/שורט)
+    asset = "לא צוין"
+    words = text.split()
+    for i, w in enumerate(words):
+        if w in ("לונג", "long", "שורט", "short"):
+            if i + 1 < len(words):
+                asset = words[i + 1]
+            break
 
-    lines.append("")
-    lines.append("⚠ זהו ניתוח טכסטואלי בלבד – לא הוראה לבצע פעולה.")
-    lines.append("אם תרצה, תכתוב לי בצורה ברורה למשל:")
-    lines.append("״שורט דאקס 18000 סטופ 18120 טייק 17750״")
+    # מחירים (מספרים) – נניח ראשון = כניסה, שני = סטופ
+    nums = re.findall(r"\d+", text)
+    entry = nums[0] if len(nums) >= 1 else "לא צוין"
+    stop = nums[1] if len(nums) >= 2 else "לא צוין"
 
-    return "\n".join(lines)
+    reply = (
+        "📊 קיבלתי אות מסחר:\n"
+        f"• צד: {side}\n"
+        f"• נכס: {asset}\n"
+        f"• כניסה: {entry}\n"
+        f"• סטופ: {stop}\n\n"
+        "⚠️ שים לב: זה רק אישור טכני של קבלת ההודעה, "
+        "לא המלצה לביצוע עסקה."
+    )
+    return reply
 
 
 # ---------- Webhook endpoint ----------
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json()
+    data = request.get_json(silent=True, force=True)
     logging.info(f"Incoming update: {data}")
 
     if not data:
         return jsonify({"status": "no data"}), 200
 
-    # קח את ההודעה הרלוונטית (חדשה או ערוכה)
+    # לוקחים את ההודעה הרלוונטית (רגילה או ערוכה)
     message = data.get("message") or data.get("edited_message")
     if not message:
         return jsonify({"status": "no message"}), 200
 
     chat = message.get("chat", {})
     chat_id = chat.get("id")
-    if chat_id is None:
-        return jsonify({"status": "no chat id"}), 200
 
-    text = message.get("text", "") or ""
-    has_photo = "photo" in message
+    # טיפול בתמונות
+    if "photo" in message:
+        # אפשר גם לקרוא caption אם יש
+        caption = message.get("caption", "")
+        reply = "📸 קיבלתי תמונה."
+        if caption:
+            reply += f"\nכיתוב: {caption}"
+        if chat_id is not None:
+            send_message(chat_id, reply)
+        return jsonify({"status": "ok"}), 200
+
+    # טקסט רגיל
+    text = message.get("text", "")
+    if chat_id is None or not text:
+        return jsonify({"status": "ok"}), 200
 
     lower = text.strip().lower()
 
     # ----- Commands -----
-    if lower == "/start" or lower == "start":
+    if lower.startswith("/start"):
         send_message(
             chat_id,
             "הבוט פעיל! ✅\n"
-            "שלח /ping לבדיקה.\n\n"
-            "אפשר לשלוח לי טריגר מסחר למשל:\n"
-            "״שורט דאקס 18000 סטופ 18120״ או ״לונג דולר/ין 153.70״."
+            "/ping או 'בדיקה' – לבדיקה.\n"
+            "תוכל לשלוח גם אות מסחר, למשל:\n"
+            "לונג דאקס 01800 סטופ 17950"
         )
 
-    elif lower.startswith("/ping"):
+    elif lower.startswith("/ping") or "בדיקה" in text:
         send_message(chat_id, "PONG ✅")
 
     else:
-        # ניתוח טריגר למסחר מתוך הטקסט
-        response_text = None
-        if text:
-            trigger_info = analyze_trading_trigger(text)
-            if trigger_info:
-                response_text = trigger_info
+        # קודם ננסה לפרש כאות מסחר
+        signal_reply = parse_trading_signal(text)
+        if signal_reply:
+            send_message(chat_id, signal_reply)
+        else:
+            # אקו רגיל
+            send_message(chat_id, f"קיבלתי: {text}")
 
-        # טיפול בתמונה
-        if has_photo:
-            if response_text:
-                response_text += "\n\n📸 בנוסף קיבלתי את התמונה שצירפת."
-            else:
-                response_text = (
-                    "📸 קיבלתי את התמונה.\n"
-                    "אם תוסיף בטקסט כיוון (לונג/שורט), נכס ומחירים – אוכל לנתח את הטריגר."
-                )
-
-        # אם אין ניתוח מיוחד – אקו בסיסי
-        if not response_text:
-            if text:
-                response_text = f"קיבלתי: {text}"
-            else:
-                response_text = "קיבלתי את ההודעה שלך ✅ (כרגע אין מה לנתח בה)."
-
-        send_message(chat_id, response_text)
-
-    # תשובה מהירה ל-Telegram שהכול תקין
+    # תשובת OK לטלגרם
     return jsonify({"status": "ok"}), 200
 
 
@@ -162,6 +145,6 @@ def home():
     return "Bot is running ✅", 200
 
 
-# ---------- Local run (not used on Render) ----------
+# ---------- Local run (לא בשימוש ברנדר) ----------
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
