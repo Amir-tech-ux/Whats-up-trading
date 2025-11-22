@@ -1,66 +1,68 @@
 import os
 import logging
-from flask import Flask, request, jsonify
 import requests
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
-# ---- Telegram Config ----
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN") or os.environ.get("BOT_TOKEN")
+# ----- Telegram config -----
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 if not TELEGRAM_TOKEN:
-    raise RuntimeError("TELEGRAM_BOT_TOKEN / BOT_TOKEN is not set")
+    raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
 
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
 
-# ---- Logging ----
+# ----- Logging -----
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
+    format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
-# ---- Send Message ----
-def send_message(chat_id, text):
-    requests.post(TELEGRAM_API_URL, json={
-        "chat_id": chat_id,
-        "text": text
-    })
+def send_message(chat_id: int, text: str) -> None:
+    """Send a message to a Telegram chat and log the response."""
+    resp = requests.post(
+        f"{TELEGRAM_API_URL}/sendMessage",
+        json={"chat_id": chat_id, "text": text},
+        timeout=10,
+    )
+    logging.info("sendMessage status=%s body=%s", resp.status_code, resp.text)
 
-# ---- Webhook route ----
+@app.route("/", methods=["GET"])
+def index():
+    return "OK", 200
+
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json()
-
-    if not data:
-        return jsonify({"status": "no data"}), 200
+    data = request.get_json(force=True, silent=True) or {}
+    logging.info("Incoming update: %s", data)
 
     message = data.get("message") or data.get("edited_message")
     if not message:
-        return jsonify({"status": "no message"}), 200
+        return jsonify({"ok": True, "status": "no message"}), 200
 
-    chat = message.get("chat")
+    chat = message.get("chat") or {}
     chat_id = chat.get("id")
-    text = message.get("text", "")
+    text = (message.get("text") or "").strip()
+    normalized = text.lower()
 
     if not chat_id:
-        return jsonify({"status": "no chat id"}), 200
+        return jsonify({"ok": True, "status": "no chat id"}), 200
 
-    normalized = text.strip().lower()
-
-    # ---- Commands ----
-    if normalized == "/start":
-        reply = "היי אמיר! הבוט מחובר ומוכן ✔️"
-    elif normalized == "/ping":
-        reply = "pong ✔️ הבוט חי 🙂"
+    # ----- פקודות בסיס -----
+    if normalized in ("/start", "/start@amir_trading_bot"):
+        reply = (
+            "היי אמיר! ✅ הבוט מחובר ומוכן.\n"
+            "פקודות זמינות:\n"
+            " • /ping – בדיקת חיבור\n"
+            " • כל טקסט אחר – אני אחזור על מה שכתבת.\n"
+        )
+    elif normalized in ("/ping", "ping", "ping/"):
+        reply = "pong ✅ הבוט חי ומחובר."
     else:
-        reply = f"קיבלתי ממך:\n{text}\nההודעה הגיעה לשרת ✔️"
+        reply = f"קיבלתי ממך:\n{text}\n\nההודעה הגיעה לשרת ברנדר ✅"
 
     send_message(chat_id, reply)
-    return jsonify({"status": "ok"}), 200
-
-
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running ✔️", 200
+    return jsonify({"ok": True}), 200
 
 
 if __name__ == "__main__":
