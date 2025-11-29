@@ -1,70 +1,95 @@
 import os
 import logging
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 
-# ----- Flask app -----
-app = Flask(__name__)
-
-# ----- Telegram config -----
+# -------- Telegram config --------
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 if not TELEGRAM_TOKEN:
-    raise RuntimeError("TELEGRAM_BOT_TOKEN is not set")
+    raise RuntimeError("TELEGRAM_BOT_TOKEN is not set in environment variables")
 
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}"
+TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/"
 
-# ----- Logging -----
+# -------- Logging --------
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 
+app = Flask(__name__)
+
+
 def send_message(chat_id: int, text: str) -> None:
-    """Send a message to a Telegram chat."""
-    if not chat_id or not text:
-        return
+    """
+    Send a message to a Telegram chat.
+    """
     try:
-        payload = {"chat_id": chat_id, "text": text}
-        resp = requests.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload, timeout=10)
-        if not resp.ok:
-            logging.error("Failed to send message: %s", resp.text)
+        payload = {
+            "chat_id": chat_id,
+            "text": text,
+        }
+        resp = requests.post(TELEGRAM_API_URL + "sendMessage", json=payload, timeout=5)
+        if resp.status_code != 200:
+            logging.error("send_message failed: %s - %s", resp.status_code, resp.text)
     except Exception as e:
-        logging.exception("Error sending message: %s", e)
+        logging.exception("Exception in send_message: %s", e)
 
 
-# ----- Health check -----
+# -------- Routes --------
+
 @app.route("/", methods=["GET"])
-def index():
-    return "Amir trading bot is alive ✅", 200
+def home():
+    """
+    Health-check route for browser / Render.
+    """
+    return "Maayan trading bot is running ✅"
 
 
-# ----- Telegram webhook endpoint -----
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json(silent=True) or {}
-    message = data.get("message") or data.get("edited_message") or {}
+    """
+    Main Telegram webhook endpoint.
+    """
+    update = request.get_json(force=True, silent=True)
+    logging.info("Incoming update: %s", update)
+
+    if not update:
+        return Response("no update", status=400)
+
+    message = update.get("message") or update.get("edited_message")
+    if not message:
+        # ignore non-message updates (callback_query וכו')
+        return jsonify({"ok": True})
 
     chat = message.get("chat") or {}
     chat_id = chat.get("id")
-    text = (message.get("text") or "").strip()
+    text = message.get("text", "").strip()
 
-    if not chat_id:
-        return jsonify({"ok": True}), 200
+    if not chat_id or not text:
+        return jsonify({"ok": True})
 
-    normalized = text.lower() if text else ""
+    normalized = text.lower()
 
-    # פקודת בדיקה /ping
-    if normalized in ("/ping", "ping", "ping/"):
+    # ---- Commands ----
+    if normalized.startswith("/start"):
+        reply = (
+            "היי אמיר 👋\n"
+            "הבוט של מעיין מחובר לרנדר ועובד ✅\n"
+            "נסה לשלוח /ping לבדיקה."
+        )
+
+    elif normalized.startswith("/ping"):
         reply = "pong ✅ הבוט חי ומחובר לרנדר."
+
     else:
-        # בהמשך נוסיף כאן את חוקי 'מעיין' והאנליזה למסחר
-        reply = f"קיבלתי ממך:\n{text}\nההודעה נקלטה בשרת Render ✅"
+        # כל טקסט אחר – אקו פשוט
+        reply = f"קיבלתי ממך:\n{text}\nההודעה הגיעה לשרת ברנדר ✅"
 
     send_message(chat_id, reply)
-    return jsonify({"ok": True}), 200
+    return jsonify({"ok": True})
 
 
-# ----- Local run (לבדיקה מקומית, Render מתעלם מזה) -----
+# לא חובה ברנדר, אבל נוח להרצה מקומית
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=True)
+    app.run(host="0.0.0.0", port=port)
