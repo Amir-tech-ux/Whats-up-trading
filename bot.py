@@ -3,6 +3,7 @@ import logging
 import requests
 from flask import Flask, request, jsonify
 
+# ----- Flask app -----
 app = Flask(__name__)
 
 # ----- Telegram config -----
@@ -19,52 +20,51 @@ logging.basicConfig(
 )
 
 def send_message(chat_id: int, text: str) -> None:
-    """Send a message to a Telegram chat and log the response."""
-    resp = requests.post(
-        f"{TELEGRAM_API_URL}/sendMessage",
-        json={"chat_id": chat_id, "text": text},
-        timeout=10,
-    )
-    logging.info("sendMessage status=%s body=%s", resp.status_code, resp.text)
+    """Send a message to a Telegram chat."""
+    if not chat_id or not text:
+        return
+    try:
+        payload = {"chat_id": chat_id, "text": text}
+        resp = requests.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload, timeout=10)
+        if not resp.ok:
+            logging.error("Failed to send message: %s", resp.text)
+    except Exception as e:
+        logging.exception("Error sending message: %s", e)
 
+
+# ----- Health check -----
 @app.route("/", methods=["GET"])
 def index():
-    return "OK", 200
+    return "Amir trading bot is alive ✅", 200
 
+
+# ----- Telegram webhook endpoint -----
 @app.route("/webhook", methods=["POST"])
 def webhook():
-    data = request.get_json(force=True, silent=True) or {}
-    logging.info("Incoming update: %s", data)
-
-    message = data.get("message") or data.get("edited_message")
-    if not message:
-        return jsonify({"ok": True, "status": "no message"}), 200
+    data = request.get_json(silent=True) or {}
+    message = data.get("message") or data.get("edited_message") or {}
 
     chat = message.get("chat") or {}
     chat_id = chat.get("id")
     text = (message.get("text") or "").strip()
-    normalized = text.lower()
 
     if not chat_id:
-        return jsonify({"ok": True, "status": "no chat id"}), 200
+        return jsonify({"ok": True}), 200
 
-    # ----- פקודות בסיס -----
-    if normalized in ("/start", "/start@amir_trading_bot"):
-        reply = (
-            "היי אמיר! ✅ הבוט מחובר ומוכן.\n"
-            "פקודות זמינות:\n"
-            " • /ping – בדיקת חיבור\n"
-            " • כל טקסט אחר – אני אחזור על מה שכתבת.\n"
-        )
-    elif normalized in ("/ping", "ping", "ping/"):
-        reply = "pong ✅ הבוט חי ומחובר."
+    normalized = text.lower() if text else ""
+
+    # פקודת בדיקה /ping
+    if normalized in ("/ping", "ping", "ping/"):
+        reply = "pong ✅ הבוט חי ומחובר לרנדר."
     else:
-        reply = f"קיבלתי ממך:\n{text}\n\nההודעה הגיעה לשרת ברנדר ✅"
+        # בהמשך נוסיף כאן את חוקי 'מעיין' והאנליזה למסחר
+        reply = f"קיבלתי ממך:\n{text}\nההודעה נקלטה בשרת Render ✅"
 
     send_message(chat_id, reply)
     return jsonify({"ok": True}), 200
 
 
+# ----- Local run (לבדיקה מקומית, Render מתעלם מזה) -----
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=port, debug=True)
