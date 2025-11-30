@@ -1,111 +1,69 @@
+from flask import Flask, request, Response
 import os
-import logging
 import requests
-from flask import Flask, request, jsonify, Response
 
-# ---------- Telegram config ----------
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
-if not TELEGRAM_TOKEN:
-    # אם הטוקן לא מוגדר ברנדר – נעצור את האפליקציה עם שגיאה ברורה
-    raise RuntimeError("TELEGRAM_TOKEN env var is missing")
-
-TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/"
-
-# אם אתה רוצה להשתמש בסיקרט מה-Environment (לא חובה)
-WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
-
-# ---------- Logging ----------
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s",
-)
-
-# ---------- Flask app ----------
 app = Flask(__name__)
 
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET")
 
-def send_message(chat_id: int, text: str) -> None:
-    """
-    שולח הודעה לצ'אט בטלגרם
-    """
-    try:
-        payload = {
-            "chat_id": chat_id,
-            "text": text,
-        }
-        resp = requests.post(
-            TELEGRAM_API_URL + "sendMessage",
-            json=payload,
-            timeout=5,
-        )
-        if resp.status_code != 200:
-            logging.error("send_message failed: %s - %s", resp.status_code, resp.text)
-    except Exception as e:
-        logging.exception("Exception in send_message: %s", e)
-
-
-# ---------- Routes ----------
+# -----------------------------
+#  ROUTES
+# -----------------------------
 
 @app.route("/", methods=["GET"])
 def home():
-    """
-    בדיקת חיים – כשנכנסים מהדפדפן ל-/
-    """
-    return "Maayan trading bot is running ✅"
+    return "Bot is running", 200
 
 
-@app.route("/webhook", methods=["POST"])
-def webhook():
-    """
-    Main Telegram webhook endpoint.
-    """
-    # בדיקת סיקרט (אם הגדרת)
-    if WEBHOOK_SECRET:
-        secret_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
-        if secret_header != WEBHOOK_SECRET:
-            logging.warning("Invalid webhook secret")
-            return Response("forbidden", status=403)
+@app.route("/webhook/<secret>", methods=["POST"])
+def webhook(secret):
+    # Check secret token in URL
+    if secret != WEBHOOK_SECRET:
+        return Response("forbidden", status=403)
 
-    update = request.get_json(force=True, silent=True) or {}
-    logging.info("Incoming update: %s", update)
+    # Check secret header from Telegram
+    secret_header = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if secret_header != WEBHOOK_SECRET:
+        return Response("forbidden", status=403)
 
-    # מקבלים את ההודעה
-    message = update.get("message") or update.get("edited_message")
-    if not message:
-        # אם זה לא הודעה רגילה (כמו callback), מתעלמים
-        return jsonify({"ok": True})
+    update = request.get_json(silent=True)
+    print("Incoming update:", update)
 
-    chat = message.get("chat") or {}
-    chat_id = chat.get("id")
-    text = (message.get("text") or "").strip()
+    if not update:
+        return Response("no update", status=200)
 
-    if not chat_id or not text:
-        return jsonify({"ok": True})
+    # Handle message
+    if "message" in update:
+        chat_id = update["message"]["chat"]["id"]
+        text = update["message"].get("text", "")
 
-    normalized = text.lower()
+        if text.lower() in ["/start", "start"]:
+            send_message(chat_id, "הבוט מחובר ועובד ✔️")
+        elif text.lower() == "/ping":
+            send_message(chat_id, "Pong ✔️")
+        else:
+            send_message(chat_id, f"קיבלתי: {text}")
 
-    # ----- Commands -----
-    if normalized.startswith("/start"):
-        reply = (
-            "היי אמיר 👋\n"
-            "הבוט של מעיין מחובר לרנדר ועובד ✅\n"
-            "נסה לשלוח /ping לבדיקה."
-        )
-
-    elif normalized.startswith("/ping"):
-        reply = "pong ✅ הבוט חי ומחובר לרנדר."
-
-    else:
-        # אקו פשוט לכל טקסט אחר
-        reply = f"קיבלתי ממך:\n{text}\nההודעה הגיעה לשרת ברנדר ✅"
-
-    # שולחים תשובה
-    send_message(chat_id, reply)
-    return jsonify({"ok": True})
+    return Response("ok", status=200)
 
 
-# ---------- Local / Render run ----------
+# -----------------------------
+#  SEND MESSAGE TO TELEGRAM
+# -----------------------------
+
+def send_message(chat_id, text):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text
+    }
+    requests.post(url, json=payload)
+
+
+# -----------------------------
+#  RUN (for local debug)
+# -----------------------------
+
 if __name__ == "__main__":
-    # ברנדר PORT מגיע מה-Environment; מקומית – ברירת מחדל 5000
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+    app.run(host="0.0.0.0", port=5000)
