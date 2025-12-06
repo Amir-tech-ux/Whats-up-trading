@@ -1,45 +1,33 @@
-from flask import Flask, request
-import telegram
-import os
-
-# שליפת הטוקן מה־Environment של Render
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-if not TOKEN:
-    raise RuntimeError("TELEGRAM_TOKEN env var is not set")
-
-bot = telegram.Bot(token=TOKEN)
-
-app = Flask(__name__)
-
-# דף בית לבדיקה מהדפדפן
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running!", 200
-
-
-# Webhook של טלגרם
 @app.route("/webhook", methods=["POST"])
 def webhook():
     try:
         data = request.get_json(force=True)
-        update = telegram.Update.de_json(data, bot)
 
-        if update.message:
-            chat_id = update.message.chat.id
-            text = update.message.text or ""
+        if not data:
+            return "no data", 200
 
-            # כאן אפשר לשים לוגיקה של מעיין / פינג וכו'
-            reply = f"הודעה התקבלה: {text}"
-            bot.send_message(chat_id=chat_id, text=reply)
+        message = data.get("message", {})
+        chat_id = message.get("chat", {}).get("id")
+        text = message.get("text", "").strip()
+
+        # אם אין טקסט - זה עדכון מסוג אחר
+        if not text:
+            return "ok", 200
+
+        # Ping → PONG
+        if text.lower() == "ping":
+            bot.send_message(chat_id, "PONG ✅")
+            return "ok", 200
+
+        # פקודת בדיקה
+        if text == "/test_alert":
+            bot.send_message(chat_id, "🚨 Maayan Test Alert 🚨\nהתראת בדיקה מרנדר.")
+            return "ok", 200
+
+        # ברירת מחדל
+        bot.send_message(chat_id, "קיבלתי את ההודעה ✔️")
+        return "ok", 200
 
     except Exception as e:
-        # חשוב: לא להפיל את השרת – רק להדפיס שגיאה ללוגים
-        print("ERROR in /webhook:", e)
-
-    # תמיד מחזירים 200 כדי שטלגרם לא ינתק את ה־webhook
-    return "OK", 200
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+        print("Webhook error:", e)
+        return "error", 200
