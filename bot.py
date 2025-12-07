@@ -1,29 +1,37 @@
 from flask import Flask, request
-import telebot
 import os
-
-TOKEN = os.getenv("TELEGRAM_TOKEN")  # ✔ משתמש במפתח הנכון
-bot = telebot.TeleBot(TOKEN)
+import telegram
 
 app = Flask(__name__)
 
-@app.route('/', methods=['GET'])
+TOKEN = os.environ.get("TELEGRAM_TOKEN")
+bot = telegram.Bot(token=TOKEN)
+
+@app.route("/", methods=["GET"])
 def home():
-    return "Bot is running", 200
+    return "Bot is running!", 200
 
-@app.route('/webhook', methods=['POST'])
+@app.route("/webhook", methods=["POST"])
 def webhook():
-    json_data = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_data)
-    bot.process_new_updates([update])
-    return "OK", 200
+    data = request.get_json(force=True)
 
+    if not data:
+        return "no data", 200
 
-@bot.message_handler(commands=['ping', 'Ping'])
-def ping(message):
-    bot.reply_to(message, "PONG")
+    message = data.get("message", {})
+    chat_id = message.get("chat", {}).get("id")
+    text = message.get("text", "")
+
+    if not chat_id:
+        return "no chat", 200
+
+    if text.lower() == "ping":
+        bot.send_message(chat_id, "PONG ✅")
+        return "ok", 200
+
+    bot.send_message(chat_id, f"Received: {text}")
+    return "ok", 200
 
 
 if __name__ == "__main__":
-    bot.remove_webhook()
-    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
