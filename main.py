@@ -4,12 +4,15 @@ import os
 
 app = FastAPI()
 
-BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+# לוקחים את הטוקן כמו שהוא מוגדר ב-Render: BOT_TOKEN
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 TELEGRAM_URL = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+
 
 @app.get("/")
 def home():
     return {"status": "ok"}
+
 
 @app.post("/webhook")
 async def webhook(req: Request):
@@ -19,6 +22,7 @@ async def webhook(req: Request):
         chat_id = data["message"]["chat"]["id"]
         text = data["message"].get("text", "")
 
+        # שולחים חזרה אקו לטלגרם
         requests.post(
             TELEGRAM_URL,
             json={
