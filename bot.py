@@ -2,7 +2,7 @@ from flask import Flask, request
 import telebot
 import os
 
-TOKEN = os.getenv("BOT_TOKEN")
+TOKEN = os.getenv("TELEGRAM_TOKEN")  # ✔ משתמש במפתח הנכון
 bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
@@ -26,4 +26,4 @@ def ping(message):
 
 if __name__ == "__main__":
     bot.remove_webhook()
-    app.run(host="0.0.0.0", port=10000)
+    app.run(host="0.0.0.0", port=int(os.getenv("PORT", 10000)))
