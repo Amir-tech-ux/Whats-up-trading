@@ -19,9 +19,12 @@ async def webhook(req: Request):
         chat_id = data["message"]["chat"]["id"]
         text = data["message"].get("text", "")
 
-        requests.post(TELEGRAM_URL, json={
-            "chat_id": chat_id,
-            "text": f"Echo: {text}"
-        })
+        requests.post(
+            TELEGRAM_URL,
+            json={
+                "chat_id": chat_id,
+                "text": f"Echo: {text}",
+            }
+        )
 
     return {"ok": True}
