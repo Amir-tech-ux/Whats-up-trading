@@ -1,37 +1,33 @@
-from flask import Flask, request
 import os
-import telegram
+from flask import Flask, request
+import telebot
+
+TOKEN = "YOUR_TOKEN"
+bot = telebot.TeleBot(TOKEN)
 
 app = Flask(__name__)
 
-TOKEN = os.environ.get("TELEGRAM_TOKEN")
-bot = telegram.Bot(token=TOKEN)
-
-@app.route("/", methods=["GET"])
-def home():
-    return "Bot is running!", 200
-
-@app.route("/webhook", methods=["POST"])
+@app.route('/webhook', methods=['POST'])
 def webhook():
-    data = request.get_json(force=True)
-
-    if not data:
-        return "no data", 200
-
-    message = data.get("message", {})
-    chat_id = message.get("chat", {}).get("id")
-    text = message.get("text", "")
-
-    if not chat_id:
-        return "no chat", 200
-
-    if text.lower() == "ping":
-        bot.send_message(chat_id, "PONG ✅")
-        return "ok", 200
-
-    bot.send_message(chat_id, f"Received: {text}")
-    return "ok", 200
+    json_string = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_string)
+    bot.process_new_updates([update])
+    return "OK", 200
 
 
-if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+@bot.message_handler(commands=['ping'])
+@bot.message_handler(func=lambda m: m.text and m.text.lower() == "ping")
+def ping_handler(message):
+    bot.reply_to(message, "PONG ✅")
+
+
+@bot.message_handler(func=lambda m: True)
+def echo_handler(message):
+    bot.reply_to(message, f"Received: {message.text}")
+
+
+if __name__ == '__main__':
+    app.run(
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", 10000))
+    )
